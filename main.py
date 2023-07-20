@@ -4,6 +4,9 @@ import lxml
 import time
 from pythorhead import Lemmy
 import os # for env file
+from dotenv import load_dotenv
+
+load_dotenv()
 
 current_time = int(time.time() * 1000) # in milliseconds since 01/01/1970
 twenty_four_hours = 86400000 # this many milliseconds in 24 hours
@@ -31,6 +34,10 @@ def get_match_ref():
             time_until_match = match_time - current_time
             if time_until_match < twenty_four_hours and time_until_match > 0: # if there is less than 24 hours until the match and the match isnt in the past
                 return [match_ref, match_title]
+    elif response.status_code == 429:
+        print("Rate Limited. Sleeping...")
+        time.sleep(60)
+
             
     else:
         print("Error getting match ref. Code: " + response.status_code)
@@ -45,6 +52,7 @@ def run():
         
     match_page = requests.get(base_url + ref, headers=headers)
     if match_page.status_code == 200:
+        
         match_soup = BeautifulSoup(match_page.content, "lxml")
         match_tab_cont = match_soup.find_all("div", {"class": "tab_container"})[1]
         match_sched_cont = match_tab_cont.find("div", {"id": "_schedules"})
@@ -58,8 +66,10 @@ def run():
                 channels[channel_name].append(country_text)
             else:
                 channels[channel_name] = [country_text]
+        post_to_lemmy(*post_template(match_title, channels))
+        
     else:
-        print("Error accessing match page. Code: " + match_page.status_code)
+        print("Error accessing match page. Code: " + str(match_page.status_code))
 
 def post_template(title, channels):
     txt = ""
@@ -67,16 +77,17 @@ def post_template(title, channels):
         txt += "\n### " + chnl + "\n"
         for country in countries:
             txt += "- " + country + "\n"
-        
-    
-    return txt
+
+    return [title, txt]
         
 
 
 def post_to_lemmy(title, body):
-    lemmy = Lemmy(os.getenv["INSTANCE"])
-    lemmy.log_in(os.getenv["USER"], os.getenv["PASS"])
-    community_id = lemmy.discover_community(os.getenv["COMMUNITY"])
+    #print(os.environ)
+    lemmy = Lemmy(os.getenv("INSTANCE"))
+    lemmy.log_in(os.getenv("USER"), os.getenv("PASS"))
+    community_id = lemmy.discover_community(os.getenv("COMMUNITY"))
+    print(os.getenv("INSTANCE"), os.getenv("USER"), os.getenv("PASS"), os.getenv("COMMUNITY"))
     post = lemmy.post.create(
         community_id, 
         "(Where to watch) " + title,
@@ -91,9 +102,9 @@ def post_to_lemmy(title, body):
 while True:
     try:
         run()
+        time.sleep(60)
     except TypeError:
-        time_to_sleep = 86400 # 24 hours
         print("No match in the next 24 hours. Will try again tomorrow.")
-        time.sleep(time_to_sleep)
+        time.sleep(86400) # 24 hours
 
 
