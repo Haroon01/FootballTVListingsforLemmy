@@ -134,8 +134,6 @@ def post_to_lemmy(title, body):
     #print(title, body)
 
 
-while True:
-    run()
-    break
+run()
 
 
